@@ -1,6 +1,7 @@
 import re
 import pandas as pd
 import requests
+import io
 from typing import List, Dict
 
 
@@ -82,7 +83,7 @@ def _filter_by_category(
 
 def download_zoning_ordinances(introduction_date: str) -> tuple[List[Dict], List[str]]:
     """Download zoning ordinances from the Chicago City Clerk eLMS."""
-    print(f"Fetching zoning data...")
+    print("Fetching zoning ordinance data...")
     records = _fetch_zoning_ordinance_data(introduction_date)
 
     if records:
@@ -128,7 +129,7 @@ def extract_address_from_title(ordinance_title: str):
     return address
 
 
-def format_ordinance_data_for_geocoding(df, output_filepath: str):
+def get_address_data_for_geocoding(df: pd.DataFrame) -> io.StringIO:
     """Parse an ordinance dataframe's address information for batching geocoding."""
     # keep only rows with an address
     df_filtered = df[df["address"].notna() & (df["address"] != "")]
@@ -144,5 +145,8 @@ def format_ordinance_data_for_geocoding(df, output_filepath: str):
         }
     )
 
-    # save without headers (for Census geocoder)
-    address_data.to_csv(output_filepath, index=False, header=False)
+    # Convert DataFrame to CSV in memory
+    csv_buffer = io.StringIO()
+    address_data.to_csv(csv_buffer, index=False, header=False)
+    csv_buffer.seek(0)
+    return csv_buffer
