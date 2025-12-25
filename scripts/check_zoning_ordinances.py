@@ -6,12 +6,16 @@ from src.ordinance import (
     get_address_data_for_geocoding,
 )
 from src.util.geocode import batch_geocode
+import os
 
 # filepath configuration
 INTRODUCTION_DATE = "2025-01-01T00:00:00.000Z"
 ORDINANCE_EXPORT_CSV = "data/out/ordinance_export.csv"
 AVONDALE_ZONING_CSV = "data/out/avondale_zoning.csv"
 CITYWIDE_ZONING_CSV = "data/out/citywide_zoning.csv"
+
+# create data/out directory if it doesn't exist
+os.makedirs("data/out", exist_ok=True)
 
 # get ordinance data
 records, fieldnames = download_zoning_ordinances(INTRODUCTION_DATE)
@@ -65,14 +69,17 @@ print("Starting spatial analysis...")
 
 
 # Join geocode, community area name, and ward number to ordinances
+# "isStale" denotes requests that are likely denied (not passed in 180 days; some requests that would include affordable housing have a 360 day window)
 con.execute("""
 CREATE OR REPLACE TABLE zoning_requests AS
     SELECT
         o.recordNumber,
-        o.address AS bill_address, 
+        billAddress: o.address, 
         o.status,
         o.subStatus,
         o.introductionDate,
+        passDate: o.finalActionDate,
+        isStale: (subStatus = 'Referred' AND CAST(introductionDate AS TIMESTAMPTZ) < now() - INTERVAL '180 days'),
         g.lon, 
         g.lat,
         w.ward "ward",
