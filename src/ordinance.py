@@ -5,7 +5,7 @@ import io
 from typing import List, Dict
 
 
-def _fetch_zoning_ordinance_data(introduction_date: str) -> List[Dict]:
+def _fetch_zoning_ordinance_data(change_date: str) -> List[Dict]:
     """Fetch zoning ordinance data from the Chicago City Clerk eLMS API."""
     API_BASE_URL = "https://api.chicityclerkelms.chicago.gov/matter"
     SEARCH_QUERY = "zoning"
@@ -16,10 +16,11 @@ def _fetch_zoning_ordinance_data(introduction_date: str) -> List[Dict]:
     # API pagination loop
     while True:
         params = {
-            "filter": f"introductionDate ge {introduction_date}",
+            "filter": f"lastPublicationDate gt {change_date} and type eq 'Ordinance'",
             "search": SEARCH_QUERY,
             "skip": skip,
             "top": top,
+            "sort": "introductionDate",
         }
 
         headers = {"accept": "application/json; charset=utf-8"}
@@ -81,10 +82,10 @@ def _filter_by_category(
     # return [record for record in records if category in record.get("matterCategory", "")]
 
 
-def download_zoning_ordinances(introduction_date: str) -> tuple[List[Dict], List[str]]:
+def download_zoning_ordinances(change_date: str) -> tuple[List[Dict], List[str]]:
     """Download zoning ordinances from the Chicago City Clerk eLMS."""
     print("Fetching zoning ordinance data...")
-    records = _fetch_zoning_ordinance_data(introduction_date)
+    records = _fetch_zoning_ordinance_data(change_date)
 
     if records:
         print(f"Retrieved {len(records)} records. Filtering by category...")
