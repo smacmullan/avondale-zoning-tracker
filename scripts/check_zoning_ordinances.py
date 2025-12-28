@@ -6,6 +6,7 @@ from src.ordinance import (
     get_address_data_for_geocoding,
 )
 from src.util.geocode import batch_geocode
+from src.util.send_email import send_zoning_update_email
 import os
 import sys
 
@@ -25,8 +26,8 @@ print("DuckDB started. ")
 
 # check if ordinances table exists
 result = con.execute("""
-    SELECT COUNT(*) 
-    FROM information_schema.tables 
+    SELECT COUNT(*)
+    FROM information_schema.tables
     WHERE lower(table_name) = 'ordinances'
 """).fetchone()
 ordinance_table_exists = result is not None and result[0] > 0
@@ -82,7 +83,7 @@ if geocode_table_exists:
         coordinates,
         CAST(str_split(coordinates, ',')[1] AS DOUBLE) AS lon,
         CAST(str_split(coordinates, ',')[2] AS DOUBLE) AS lat,
-        ST_Point(lon, lat) AS geom        
+        ST_Point(lon, lat) AS geom
     FROM geocode_raw
     WHERE geocode_raw.coordinates IS NOT NULL AND geocode_raw.coordinates <> ''
     """)
@@ -95,7 +96,7 @@ else:
         coordinates,
         CAST(str_split(coordinates, ',')[1] AS DOUBLE) AS lon,
         CAST(str_split(coordinates, ',')[2] AS DOUBLE) AS lat,
-        ST_Point(lon, lat) AS geom        
+        ST_Point(lon, lat) AS geom
     FROM geocode_raw
     WHERE geocode_raw.coordinates IS NOT NULL AND geocode_raw.coordinates <> ''
     """)
@@ -124,20 +125,20 @@ con.execute("""
 CREATE OR REPLACE TABLE zoning_requests AS
     SELECT
         o.recordNumber,
-        billAddress: o.address, 
+        billAddress: o.address,
         o.status,
         o.subStatus,
         o.introductionDate,
         passDate: o.finalActionDate,
         isStale: (subStatus = 'Referred' AND CAST(introductionDate AS TIMESTAMPTZ) < now() - INTERVAL '180 days'),
-        g.lon, 
+        g.lon,
         g.lat,
         w.ward "ward",
         c.community,
-        o.title, 
+        o.title,
         o.matterId,
         CONCAT('https://chicityclerkelms.chicago.gov/matter/?matterId=', o.matterId) AS url,
-        g.geom   
+        g.geom
     FROM ordinances o
         LEFT JOIN geocode g USING (recordNumber)
         LEFT JOIN communities c
@@ -190,7 +191,7 @@ row = con.execute("SELECT COUNT(*) FROM zoning_in_avondale").fetchone()
 count = row[0] if row is not None else 0
 print(f"Wrote {AVONDALE_ZONING_CSV}. {count} records identified.")
 
-# get and print recent changes
+# get and send recent changes
 recent_changes = con.execute(
     """
     SELECT *
@@ -201,15 +202,19 @@ recent_changes = con.execute(
     [last_change_date],
 ).fetchall()
 
+# convert rows to dictionary
+columns = [desc[0] for desc in con.description]
+recent_changes = [dict(zip(columns, row)) for row in recent_changes]
+
 if len(recent_changes) > 0:
+    send_zoning_update_email(recent_changes)
+
+    # print to console
     print("\nRecent Avondale zoning changes:")
     for record in recent_changes:
-        address = record[1]
-        ward = record[9]
-        neighborhood = record[10]
-        status = record[3]
-        link = record[13]
-        print(f"   {address} ({ward}, {neighborhood}) - {status}")
+        print(
+            f"   {record['billAddress']} ({record['ward']}, {record['community']}) - {record['subStatus']}"
+        )
 else:
     print("\nNo recent Avondale zoning changes.")
 
